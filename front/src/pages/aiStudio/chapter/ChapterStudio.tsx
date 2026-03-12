@@ -58,6 +58,8 @@ import {
 } from '@ant-design/icons'
 import { useParams, Link } from 'react-router-dom'
 import api from '../../../services/aiStudioApi'
+import { StudioChaptersService } from '../../../services/generated'
+import type { ChapterRead } from '../../../services/generated'
 import type { Chapter, Shot, ShotDetail } from '../../../mocks/data'
 import './chapterStudio.separation.css'
 
@@ -102,6 +104,19 @@ function isTypingTarget(target: EventTarget | null) {
   if (tag === 'input' || tag === 'textarea' || tag === 'select') return true
   if (target.isContentEditable) return true
   return Boolean(target.closest('[contenteditable="true"]'))
+}
+
+function toUIChapter(c: ChapterRead): Chapter {
+  return {
+    id: c.id,
+    projectId: c.project_id,
+    index: c.index,
+    title: c.title,
+    summary: c.summary ?? '',
+    storyboardCount: c.storyboard_count ?? 0,
+    status: c.status ?? 'draft',
+    updatedAt: new Date().toISOString(),
+  }
 }
 
 function useLocalStoragePrefs() {
@@ -219,11 +234,15 @@ const ChapterStudio: React.FC = () => {
   }
 
   const loadChapter = async () => {
-    if (!projectId || !chapterId) return
+    if (!chapterId) return
     try {
-      const list = await api.chapters.list(projectId)
-      const found = Array.isArray(list) ? list.find((c) => c.id === chapterId) ?? null : null
-      setChapter(found)
+      const res = await StudioChaptersService.getChapterApiV1StudioChaptersChapterIdGet({ chapterId })
+      const data = res.data
+      if (!data) {
+        setChapter(null)
+        return
+      }
+      setChapter(toUIChapter(data))
     } catch {
       // 章节信息仅用于标题展示，失败不阻断工作台
       setChapter(null)

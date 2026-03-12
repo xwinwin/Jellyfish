@@ -39,6 +39,8 @@ import {
 } from '@ant-design/icons'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import api from '../../../services/aiStudioApi'
+import { StudioChaptersService } from '../../../services/generated'
+import type { ChapterRead } from '../../../services/generated'
 import type { Chapter } from '../../../mocks/data'
 
 const { Header, Content } = Layout
@@ -172,6 +174,19 @@ function isExtractKey(key: string): key is 'all' | ExtractKind {
   return key === 'all' || key === 'storyboards' || key === 'roles' || key === 'scenes' || key === 'props'
 }
 
+function toUIChapter(c: ChapterRead): Chapter {
+  return {
+    id: c.id,
+    projectId: c.project_id,
+    index: c.index,
+    title: c.title,
+    summary: c.summary ?? '',
+    storyboardCount: c.storyboard_count ?? 0,
+    status: c.status ?? 'draft',
+    updatedAt: new Date().toISOString(),
+  }
+}
+
 const ChapterPrep: React.FC = () => {
   const { projectId, chapterId } = useParams<{ projectId?: string; chapterId?: string }>()
   const navigate = useNavigate()
@@ -203,16 +218,22 @@ const ChapterPrep: React.FC = () => {
   const paragraphCount = useMemo(() => text.split(/\n\s*\n/).filter((p) => p.trim()).length, [text])
 
   useEffect(() => {
-    if (!projectId || !chapterId) return
-    api.chapters
-      .list(projectId)
-      .then((list) => {
-        const found = Array.isArray(list) ? list.find((c) => c.id === chapterId) ?? null : null
-        setChapter(found)
-        setTitleValue(found?.title ?? '')
+    if (!chapterId) return
+    StudioChaptersService.getChapterApiV1StudioChaptersChapterIdGet({ chapterId })
+      .then((res) => {
+        const data = res.data
+        if (!data) {
+          setChapter(null)
+          return
+        }
+        const ui = toUIChapter(data)
+        setChapter(ui)
+        setTitleValue(ui.title)
       })
-      .catch(() => setChapter(null))
-  }, [projectId, chapterId])
+      .catch(() => {
+        setChapter(null)
+      })
+  }, [chapterId])
 
   // load draft
   useEffect(() => {
@@ -406,7 +427,10 @@ const ChapterPrep: React.FC = () => {
           gap: 12,
         }}
       >
-        <Link to={projectId ? `/projects/${projectId}/chapters` : '/projects'} className="text-gray-600 hover:text-blue-600 flex items-center gap-1">
+        <Link
+          to={projectId ? `/projects/${projectId}?tab=chapters` : '/projects'}
+          className="text-gray-600 hover:text-blue-600 flex items-center gap-1"
+        >
           <ArrowLeftOutlined /> 返回章节列表
         </Link>
         <Divider type="vertical" />

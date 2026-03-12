@@ -1,5 +1,5 @@
 import { http, HttpResponse } from 'msw'
-import type { Project, Agent, Provider, Model, ModelSettings } from './data'
+import type { Project, Agent, Provider, Model, ModelSettings, Chapter } from './data'
 import {
   agents as initialAgents,
   assets,
@@ -17,6 +17,7 @@ import {
 
 // 可变的项目列表，支持创建/编辑/删除（会话内生效）
 let projectsList: Project[] = [...initialProjects]
+let chaptersList: Chapter[] = [...chapters]
 let agentsList: Agent[] = [...initialAgents]
 let providersList: Provider[] = [...initialProviders]
 let modelsList: Model[] = [...llmModels]
@@ -30,7 +31,304 @@ function nextProjectId(): string {
   return `p${max + 1}`
 }
 
+function makePagination<T>(items: T[], page: number, pageSize: number) {
+  const total = items.length
+  const safePageSize = pageSize > 0 ? pageSize : 10
+  const maxPage = Math.max(1, Math.ceil(total / safePageSize))
+  const safePage = Math.min(Math.max(page, 1), maxPage)
+  const start = (safePage - 1) * safePageSize
+  const pageItems = items.slice(start, start + safePageSize)
+  return {
+    items: pageItems,
+    pagination: {
+      page: safePage,
+      page_size: safePageSize,
+      total,
+      max_page: maxPage,
+    },
+  }
+}
+
+function ok<T>(data: T, status = 200, message = 'OK') {
+  return HttpResponse.json(
+    {
+      code: status,
+      message,
+      data,
+    },
+    { status },
+  )
+}
+
+function notFound(message = 'Not found') {
+  return HttpResponse.json(
+    {
+      code: 404,
+      message,
+      data: null,
+    },
+    { status: 404 },
+  )
+}
+
+function toProjectRead(p: Project) {
+  return {
+    id: p.id,
+    name: p.name,
+    description: p.description,
+    style: p.style,
+    seed: p.seed,
+    unify_style: p.unifyStyle,
+    progress: p.progress,
+    stats: p.stats,
+  }
+}
+
+function toChapterRead(c: Chapter) {
+  return {
+    id: c.id,
+    project_id: c.projectId,
+    index: c.index,
+    title: c.title,
+    summary: c.summary,
+    storyboard_count: c.storyboardCount,
+    status: c.status,
+  }
+}
+
 export const handlers = [
+  // ====== StudioProjectsService /api/v1/studio/projects ======
+  http.get('/api/v1/studio/projects', ({ request }) => {
+    const url = new URL(request.url)
+    const q = url.searchParams.get('q')?.trim()
+    const page = Number(url.searchParams.get('page') ?? '1') || 1
+    const pageSize = Number(url.searchParams.get('page_size') ?? '10') || 10
+
+    let list = projectsList
+    if (q) {
+      list = list.filter(
+        (p) =>
+          p.name.includes(q) ||
+          (p.description && p.description.includes(q)),
+      )
+    }
+
+    const paged = makePagination(list.map(toProjectRead), page, pageSize)
+    return ok(paged)
+  }),
+
+  http.post('/api/v1/studio/projects', async ({ request }) => {
+    const body = (await request.json()) as Partial<Project> & {
+      id?: string
+      name?: string
+      description?: string
+      style?: Project['style']
+      seed?: number
+      unify_style?: boolean
+      progress?: number
+      stats?: Project['stats']
+    }
+
+    const id = body.id || nextProjectId()
+    const now = new Date().toISOString().slice(0, 16).replace('T', ' ')
+    const newProject: Project = {
+      id,
+      name: body.name ?? '未命名项目',
+      description: body.description ?? '',
+      style: (body.style as Project['style']) ?? '现实主义',
+      seed: typeof body.seed === 'number' ? body.seed : Math.floor(Math.random() * 99999),
+      unifyStyle: typeof body.unify_style === 'boolean' ? body.unify_style : true,
+      progress: typeof body.progress === 'number' ? body.progress : 0,
+      stats: body.stats ?? { chapters: 0, roles: 0, scenes: 0, props: 0 },
+      updatedAt: now,
+    }
+
+    projectsList = [...projectsList, newProject]
+    return ok(toProjectRead(newProject), 200, 'Created')
+  }),
+
+  http.get('/api/v1/studio/projects/:project_id', ({ params }) => {
+    const { project_id } = params as { project_id: string }
+    const project = projectsList.find((p) => p.id === project_id)
+    if (!project) return notFound('项目不存在')
+    return ok(toProjectRead(project))
+  }),
+
+  http.patch('/api/v1/studio/projects/:project_id', async ({ params, request }) => {
+    const { project_id } = params as { project_id: string }
+    const idx = projectsList.findIndex((p) => p.id === project_id)
+    if (idx === -1) return notFound('项目不存在')
+
+    const body = (await request.json()) as Partial<{
+      name: string
+      description: string
+      style: Project['style']
+      seed: number
+      unify_style: boolean
+      progress: number
+      stats: Project['stats']
+    }>
+
+    const now = new Date().toISOString().slice(0, 16).replace('T', ' ')
+    const current = projectsList[idx]
+    const updated: Project = {
+      ...current,
+      name: body.name ?? current.name,
+      description: body.description ?? current.description,
+      style: (body.style as Project['style']) ?? current.style,
+      seed: typeof body.seed === 'number' ? body.seed : current.seed,
+      unifyStyle:
+        typeof body.unify_style === 'boolean' ? body.unify_style : current.unifyStyle,
+      progress:
+        typeof body.progress === 'number' ? body.progress : current.progress,
+      stats:
+        (body.stats as Project['stats']) && typeof body.stats === 'object'
+          ? (body.stats as Project['stats'])
+          : current.stats,
+      updatedAt: now,
+    }
+
+    projectsList[idx] = updated
+    return ok(toProjectRead(updated))
+  }),
+
+  http.delete('/api/v1/studio/projects/:project_id', ({ params }) => {
+    const { project_id } = params as { project_id: string }
+    const idx = projectsList.findIndex((p) => p.id === project_id)
+    if (idx === -1) return notFound('项目不存在')
+    projectsList = projectsList.filter((p) => p.id !== project_id)
+    return ok(null, 200, 'Deleted')
+  }),
+
+  // ====== StudioChaptersService /api/v1/studio/chapters ======
+  http.get('/api/v1/studio/chapters', ({ request }) => {
+    const url = new URL(request.url)
+    const projectId = url.searchParams.get('project_id') ?? undefined
+    const q = url.searchParams.get('q')?.trim()
+    const page = Number(url.searchParams.get('page') ?? '1') || 1
+    const pageSize = Number(url.searchParams.get('page_size') ?? '10') || 10
+
+    let list = chaptersList
+    if (projectId) {
+      list = list.filter((c) => c.projectId === projectId)
+    }
+    if (q) {
+      list = list.filter(
+        (c) =>
+          c.title.includes(q) ||
+          (c.summary && c.summary.includes(q)),
+      )
+    }
+
+    const paged = makePagination(list.map(toChapterRead), page, pageSize)
+    return ok(paged)
+  }),
+
+  http.post('/api/v1/studio/chapters', async ({ request }) => {
+    const body = (await request.json()) as Partial<{
+      id: string
+      project_id: string
+      index: number
+      title: string
+      summary?: string
+      storyboard_count?: number
+      status?: Chapter['status']
+    }>
+
+    if (!body.project_id || !body.title) {
+      return HttpResponse.json(
+        { code: 422, message: 'project_id 和 title 为必填', data: null },
+        { status: 422 },
+      )
+    }
+
+    const id =
+      body.id ||
+      `c_${Date.now()}_${Math.random().toString(16).slice(2)}`
+    const nextIndex =
+      typeof body.index === 'number'
+        ? body.index
+        : (chaptersList
+            .filter((c) => c.projectId === body.project_id)
+            .reduce((max, c) => Math.max(max, c.index), 0) || 0) + 1
+
+    const now = new Date().toISOString()
+    const newChapter: Chapter = {
+      id,
+      projectId: body.project_id,
+      index: nextIndex,
+      title: body.title,
+      summary: body.summary ?? '',
+      storyboardCount: body.storyboard_count ?? 0,
+      status: body.status ?? 'draft',
+      updatedAt: now,
+    }
+
+    chaptersList = [...chaptersList, newChapter]
+    return ok(toChapterRead(newChapter), 200, 'Created')
+  }),
+
+  http.get('/api/v1/studio/chapters/:chapter_id', ({ params }) => {
+    const { chapter_id } = params as { chapter_id: string }
+    const chapter = chaptersList.find((c) => c.id === chapter_id)
+    if (!chapter) return notFound('章节不存在')
+    return ok(toChapterRead(chapter))
+  }),
+
+  http.patch('/api/v1/studio/chapters/:chapter_id', async ({ params, request }) => {
+    const { chapter_id } = params as { chapter_id: string }
+    const idx = chaptersList.findIndex((c) => c.id === chapter_id)
+    if (idx === -1) return notFound('章节不存在')
+
+    const body = (await request.json()) as Partial<{
+      project_id: string | null
+      index: number | null
+      title: string | null
+      summary: string | null
+      storyboard_count: number | null
+      status: Chapter['status'] | null
+    }>
+
+    const current = chaptersList[idx]
+    const updated: Chapter = {
+      ...current,
+      projectId:
+        typeof body.project_id === 'string'
+          ? body.project_id
+          : current.projectId,
+      index:
+        typeof body.index === 'number'
+          ? body.index
+          : current.index,
+      title:
+        typeof body.title === 'string'
+          ? body.title
+          : current.title,
+      summary:
+        typeof body.summary === 'string'
+          ? body.summary
+          : current.summary,
+      storyboardCount:
+        typeof body.storyboard_count === 'number'
+          ? body.storyboard_count
+          : current.storyboardCount,
+      status:
+        (body.status as Chapter['status']) ?? current.status,
+      updatedAt: new Date().toISOString(),
+    }
+
+    chaptersList[idx] = updated
+    return ok(toChapterRead(updated))
+  }),
+
+  http.delete('/api/v1/studio/chapters/:chapter_id', ({ params }) => {
+    const { chapter_id } = params as { chapter_id: string }
+    const idx = chaptersList.findIndex((c) => c.id === chapter_id)
+    if (idx === -1) return notFound('章节不存在')
+    chaptersList = chaptersList.filter((c) => c.id !== chapter_id)
+    return ok(null, 200, 'Deleted')
+  }),
+
   // 项目列表
   http.get('/api/projects', () => {
     return HttpResponse.json(projectsList, { status: 200 })
