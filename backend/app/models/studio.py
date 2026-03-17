@@ -1326,21 +1326,42 @@ class PromptCategory(str, Enum):
     storyboard = "storyboard"
     bgm = "bgm"
     sfx = "sfx"
-    role = "role"
+    chapter_front = "chapter_front"
+    chapter_back = "chapter_back"
+    chapter_side = "chapter_side"
+    actor_image = "actor_image"
+    actor_image_back = "actor_image_back"
+    actor_image_side = "actor_image_side"
+    prop_front = "prop_front"
+    prop_back = "prop_back"
+    prop_side = "prop_side"
+    scene_front = "scene_front"
+    scene_back = "scene_back"
+    scene_side = "scene_side"
+    costume_front = "costume_front"
+    costume_back = "costume_back"
+    costume_side = "costume_side"
     combined = "combined"
 
 
 class PromptTemplate(Base,TimestampMixin):
-    """提示词模板表。"""
+    """提示词模板表。
+
+    应用层保证：
+    - 同一 category 下至多一条 is_default=True，写入/更新时由接口层维护。
+    - is_system=True 的记录由初始化脚本写入，接口层拒绝删除和修改。
+    """
 
     __tablename__ = "prompt_templates"
 
-    id: Mapped[str] = mapped_column(String(64), primary_key=True, comment="模板 ID")
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, comment="模板 ID（UUID）")
     category: Mapped[PromptCategory] = mapped_column(String(32), nullable=False, index=True, comment="模板类别")
     name: Mapped[str] = mapped_column(String(255), nullable=False, comment="模板名称")
     preview: Mapped[str] = mapped_column(Text, nullable=False, default="", comment="预览文案")
     content: Mapped[str] = mapped_column(Text, nullable=False, comment="模板内容")
     variables: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list, comment="变量名列表（JSON 数组）")
+    is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, comment="是否为默认提示词（同类别唯一，应用层保证）")
+    is_system: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, comment="是否为系统预置（仅初始化脚本写入，接口层禁止删改）")
 
     __table_args__ = (
         Index("ix_prompt_templates_name", "name"),

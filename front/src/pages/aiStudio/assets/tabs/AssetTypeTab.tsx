@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Card, Input, Row, Col, Tag, Button, message, Modal, Space, Pagination } from 'antd'
+import { Card, Input, InputNumber, Row, Col, Tag, Button, message, Modal, Space, Pagination } from 'antd'
 import { EditOutlined, DeleteOutlined, PlusOutlined, ReloadOutlined } from '@ant-design/icons'
 import type { AssetCreate, AssetUpdate } from '../../../../services/generated'
-import { OpenAPI } from '../../../../services/generated'
+import { resolveAssetUrl } from '../utils'
+import { DisplayImageCard } from '../components/DisplayImageCard'
 
 function normalizeTags(input: string): string[] {
   return input
@@ -17,31 +18,19 @@ export type StudioAssetLike = {
   description?: string
   thumbnail?: string
   tags?: string[]
-}
-
-function resolveThumbnailUrl(thumbnail?: string): string | undefined {
-  if (!thumbnail) return undefined
-  const value = thumbnail.trim()
-  if (!value) return undefined
-
-  // Keep absolute/data/blob URLs as-is; otherwise resolve against API base.
-  if (/^(?:[a-z][a-z\d+\-.]*:)?\/\//i.test(value) || value.startsWith('data:') || value.startsWith('blob:')) {
-    return value
-  }
-
-  try {
-    const fallbackBase = typeof window !== 'undefined' ? window.location.origin : 'http://localhost'
-    return new URL(value, OpenAPI.BASE || fallbackBase).toString()
-  } catch {
-    return value
-  }
+  view_count?: number
 }
 
 function normalizeAsset(asset: StudioAssetLike): StudioAssetLike {
   return {
     ...asset,
-    thumbnail: resolveThumbnailUrl(asset.thumbnail),
+    thumbnail: resolveAssetUrl(asset.thumbnail),
   }
+}
+
+function clampViewCount(value: number | null): number | null {
+  if (value === null) return null
+  return Math.max(0, Math.min(4, Math.trunc(value)))
 }
 
 type AssetMutationPayload = AssetUpdate & {
@@ -58,14 +47,14 @@ export function AssetTypeTab({
   createAsset,
   updateAsset,
   deleteAsset,
-  generateImage,
+  onEditAsset,
 }: {
   label: string
   listAssets: (params: { q?: string; page: number; pageSize: number }) => Promise<{ items: StudioAssetLike[]; total: number }>
   createAsset: (payload: AssetCreatePayload) => Promise<StudioAssetLike>
   updateAsset: (id: string, payload: AssetMutationPayload) => Promise<StudioAssetLike>
   deleteAsset: (id: string) => Promise<void>
-  generateImage: (assetId: string) => Promise<string>
+  onEditAsset?: (asset: StudioAssetLike) => void
 }) {
   const [assets, setAssets] = useState<StudioAssetLike[]>([])
   const [loading, setLoading] = useState(true)
@@ -79,6 +68,7 @@ export function AssetTypeTab({
   const [formName, setFormName] = useState('')
   const [formDesc, setFormDesc] = useState('')
   const [formTags, setFormTags] = useState('')
+  const [formViewCount, setFormViewCount] = useState<number | null>(null)
 
   const [previewOpen, setPreviewOpen] = useState(false)
   const [previewUrl, setPreviewUrl] = useState('')
@@ -115,6 +105,7 @@ export function AssetTypeTab({
     setFormName('')
     setFormDesc('')
     setFormTags('')
+    setFormViewCount(null)
     setEditOpen(true)
   }
 
@@ -123,7 +114,16 @@ export function AssetTypeTab({
     setFormName(asset.name)
     setFormDesc(asset.description ?? '')
     setFormTags((asset.tags ?? []).join(', '))
+    setFormViewCount(asset.view_count ?? null)
     setEditOpen(true)
+  }
+
+  const handleEdit = (asset: StudioAssetLike) => {
+    if (onEditAsset) {
+      onEditAsset(asset)
+      return
+    }
+    openEdit(asset)
   }
 
   const handleSave = async () => {
@@ -133,11 +133,14 @@ export function AssetTypeTab({
     }
 
     try {
+      const nextViewCount = clampViewCount(formViewCount)
+
       if (editing) {
         const next = await updateAsset(editing.id, {
           name: formName.trim(),
           description: formDesc.trim(),
           tags: normalizeTags(formTags),
+          view_count: nextViewCount,
         })
         const normalizedNext = normalizeAsset(next)
         setAssets((prev) => prev.map((a) => (a.id === editing.id ? normalizedNext : a)))
@@ -149,6 +152,7 @@ export function AssetTypeTab({
           description: formDesc.trim(),
           tags: normalizeTags(formTags),
           thumbnail: '',
+          ...(nextViewCount === null ? {} : { view_count: nextViewCount }),
         })
         message.success('已创建')
         // 创建后回到第一页刷新，保证立刻可见（服务端可能按时间倒序）
@@ -184,20 +188,8 @@ export function AssetTypeTab({
     })
   }
 
-  const handleGenerate = async (asset: StudioAssetLike) => {
-    try {
-      const url = await generateImage(asset.id)
-      const next = await updateAsset(asset.id, { thumbnail: url })
-      const normalizedNext = normalizeAsset(next)
-      setAssets((prev) => prev.map((a) => (a.id === asset.id ? normalizedNext : a)))
-      message.success('已生成（Mock）')
-    } catch {
-      message.error('生成失败')
-    }
-  }
-
   const openPreview = (asset: StudioAssetLike) => {
-    const thumbnailUrl = resolveThumbnailUrl(asset.thumbnail)
+    const thumbnailUrl = resolveAssetUrl(asset.thumbnail)
     if (!thumbnailUrl) {
       message.info('未生成图片')
       return
@@ -239,19 +231,18 @@ export function AssetTypeTab({
             </Col>
           ) : (
             filtered.map((a) => {
-              const thumbnailUrl = resolveThumbnailUrl(a.thumbnail)
+              const thumbnailUrl = resolveAssetUrl(a.thumbnail)
               return (
               <Col xs={24} sm={12} md={8} lg={6} key={a.id}>
-                <Card
-                  hoverable
-                  size="small"
+                <DisplayImageCard
                   title={<span className="truncate">{a.name}</span>}
+                  imageUrl={thumbnailUrl}
+                  imageAlt={a.name}
+                  placeholder="未生成"
+                  onImageClick={() => openPreview(a)}
                   extra={
                     <Space size="small">
-                      <Button size="small" onClick={() => handleGenerate(a)}>
-                        生成
-                      </Button>
-                      <Button size="small" type="link" icon={<EditOutlined />} onClick={() => openEdit(a)}>
+                      <Button size="small" type="link" icon={<EditOutlined />} onClick={() => handleEdit(a)}>
                         编辑
                       </Button>
                     </Space>
@@ -266,24 +257,18 @@ export function AssetTypeTab({
                       onClick={() => handleDelete(a)}
                     />,
                   ]}
-                >
-                  <div className="text-xs text-gray-500 mb-2 line-clamp-2">{a.description || '暂无描述'}</div>
-                  <div
-                    className="h-32 rounded-md border border-gray-200 bg-gray-50 flex items-center justify-center text-gray-500 text-sm overflow-hidden cursor-pointer"
-                    onClick={() => openPreview(a)}
-                  >
-                    {thumbnailUrl ? (
-                      <img src={thumbnailUrl} alt={a.name} className="w-full h-full object-cover" />
-                    ) : (
-                      '未生成'
-                    )}
-                  </div>
-                  <div className="mt-2 flex flex-wrap gap-1">
-                    {(a.tags ?? []).slice(0, 3).map((t) => (
-                      <Tag key={t}>{t}</Tag>
-                    ))}
-                  </div>
-                </Card>
+                  meta={
+                    <>
+                      <div className="text-xs text-gray-500 mb-2 line-clamp-2">{a.description || '暂无描述'}</div>
+                      <div className="flex flex-wrap gap-1">
+                        {typeof a.view_count === 'number' && <Tag color="blue">镜头 {a.view_count}</Tag>}
+                        {(a.tags ?? []).slice(0, 3).map((t) => (
+                          <Tag key={t}>{t}</Tag>
+                        ))}
+                      </div>
+                    </>
+                  }
+                />
               </Col>
             )})
           )}
@@ -328,6 +313,18 @@ export function AssetTypeTab({
           <div>
             <span className="text-gray-600 text-sm">标签（逗号分隔）</span>
             <Input value={formTags} onChange={(e) => setFormTags(e.target.value)} className="mt-1" />
+          </div>
+          <div>
+            <span className="text-gray-600 text-sm">镜头数</span>
+            <InputNumber
+              min={0}
+              max={4}
+              precision={0}
+              value={formViewCount}
+              onChange={(v) => setFormViewCount(v ?? null)}
+              className="mt-1 w-full"
+              placeholder="例如 4（最大 4）"
+            />
           </div>
         </div>
       </Modal>

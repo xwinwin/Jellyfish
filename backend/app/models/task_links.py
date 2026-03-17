@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from enum import Enum
 
-from sqlalchemy import Boolean, ForeignKey, Index, Integer, String, UniqueConstraint
+from sqlalchemy import ForeignKey, Index, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
@@ -66,6 +66,12 @@ class GenerationTaskLink(Base, TimestampMixin):
         default="",
         comment="关联业务实体 ID（如具体的 prop/costume/scene/shot 等对象 ID）",
     )
+    file_id: Mapped[str | None] = mapped_column(
+        String(64),
+        ForeignKey("files.id", ondelete="SET NULL"),
+        nullable=True,
+        comment="关联产物文件 ID（files.id；适用于图片/音频/视频）",
+    )
     status: Mapped[GenerationTaskLinkStatus] = mapped_column(
         String(32),
         nullable=False,
@@ -91,6 +97,7 @@ class GenerationTaskLink(Base, TimestampMixin):
             "relation_type",
             "relation_entity_id",
         ),
+        Index("ix_task_link_file_id", "file_id"),
         Index(
             "ix_task_link_status_updated_at",
             "status",

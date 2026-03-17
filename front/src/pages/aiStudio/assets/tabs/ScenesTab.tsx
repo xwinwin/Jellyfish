@@ -1,8 +1,11 @@
 import { AssetTypeTab } from './AssetTypeTab'
 import { StudioAssetsService } from '../../../../services/generated'
 import type { SceneRead } from '../../../../services/generated'
+import { useNavigate } from 'react-router-dom'
 
 export function ScenesTab() {
+  const navigate = useNavigate()
+
   return (
     <AssetTypeTab
       label="场景"
@@ -26,9 +29,8 @@ export function ScenesTab() {
       deleteAsset={async (id) => {
         await StudioAssetsService.deleteSceneApiV1StudioAssetsScenesSceneIdDelete({ sceneId: id })
       }}
-      generateImage={async (assetId) => {
-        const url = `https://picsum.photos/seed/scene_${assetId}_${Date.now()}/768/768`
-        return url
+      onEditAsset={(asset) => {
+        navigate(`/assets/scenes/${asset.id}/edit`)
       }}
     />
   )

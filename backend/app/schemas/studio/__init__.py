@@ -6,3 +6,9 @@ from app.schemas.studio.files import (
     FileTypeEnum,
     FileUpdate,
 )
+from app.schemas.studio.prompts import (
+    PromptCategoryOptionRead,
+    PromptTemplateCreate,
+    PromptTemplateRead,
+    PromptTemplateUpdate,
+)

@@ -6,16 +6,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from pydantic import BaseModel, Field
 
+from app.api.utils import apply_order, paginate
 from app.core.task_manager import SqlAlchemyTaskStore
 from app.core.task_manager.types import TaskStatus
 from app.dependencies import get_db
 from app.models.task import GenerationTask
 from app.models.task_links import GenerationTaskLink
-from app.schemas.common import ApiResponse, success_response
+from app.schemas.common import ApiResponse, PaginatedData, paginated_response, success_response
 
 from .common import TaskLinkAdoptRead, TaskLinkAdoptRequest, TaskResultRead, TaskStatusRead, ensure_single_bind_target
 
 router = APIRouter()
+TASK_LINK_ORDER_FIELDS = {"updated_at", "created_at", "id", "status"}
 
 
 class GenerationTaskLinkBase(BaseModel):
@@ -25,6 +27,7 @@ class GenerationTaskLinkBase(BaseModel):
     resource_type: str = Field(..., description="生成资源类型（如 image/video/text/task_link）")
     relation_type: str = Field(..., description="业务类型（如 prop/costume/scene 等）")
     relation_entity_id: str = Field(..., description="关联业务实体 ID")
+    file_id: str | None = Field(None, description="关联产物文件 ID（files.id；适用于图片/音频/视频）")
     status: str = Field(..., description="关联状态：accepted=已采用、todo=待操作、rejected=未采用")
 
 
@@ -35,6 +38,7 @@ class GenerationTaskLinkCreate(BaseModel):
     resource_type: str = Field(..., description="生成资源类型（如 image/video/text/task_link）")
     relation_type: str = Field(..., description="业务类型（如 prop/costume/scene 等）")
     relation_entity_id: str = Field(..., description="关联业务实体 ID")
+    file_id: str | None = Field(None, description="关联产物文件 ID（files.id；适用于图片/音频/视频）")
     status: str = Field("todo", description="关联状态：accepted=已采用、todo=待操作、rejected=未采用；默认 todo")
 
 
@@ -44,6 +48,7 @@ class GenerationTaskLinkUpdate(BaseModel):
     resource_type: str | None = Field(None, description="生成资源类型（如 image/video/text/task_link）")
     relation_type: str | None = Field(None, description="业务类型（如 prop/costume/scene 等）")
     relation_entity_id: str | None = Field(None, description="关联业务实体 ID")
+    file_id: str | None = Field(None, description="关联产物文件 ID（files.id；适用于图片/音频/视频）")
     status: str | None = Field(None, description="关联状态：accepted=已采用、todo=待操作、rejected=未采用")
 
 
@@ -141,8 +146,8 @@ async def adopt_task_link(
 
 @router.get(
     "/task-links",
-    response_model=ApiResponse[list[GenerationTaskLinkRead]],
-    summary="生成任务关联列表（支持多条件过滤）",
+    response_model=ApiResponse[PaginatedData[GenerationTaskLinkRead]],
+    summary="生成任务关联列表（分页，支持多条件过滤）",
 )
 async def list_task_links(
     db: AsyncSession = Depends(get_db),
@@ -151,7 +156,11 @@ async def list_task_links(
     relation_entity_id: str | None = Query(None, description="按 relation_entity_id 过滤"),
     status: str | None = Query(None, description="按关联状态过滤（accepted/todo/rejected）"),
     task_id: str | None = Query(None, description="按 task_id 过滤"),
-) -> ApiResponse[list[GenerationTaskLinkRead]]:
+    order: str | None = Query(None, description="排序字段：updated_at/created_at/id/status"),
+    is_desc: bool = Query(True, description="是否倒序；默认 true"),
+    page: int = Query(1, ge=1, description="页码"),
+    page_size: int = Query(10, ge=1, le=100, description="每页条数"),
+) -> ApiResponse[PaginatedData[GenerationTaskLinkRead]]:
     stmt = select(GenerationTaskLink)
     if resource_type is not None:
         stmt = stmt.where(GenerationTaskLink.resource_type == resource_type)
@@ -163,10 +172,21 @@ async def list_task_links(
         stmt = stmt.where(GenerationTaskLink.status == status)
     if task_id is not None:
         stmt = stmt.where(GenerationTaskLink.task_id == task_id)
-
-    result = await db.execute(stmt)
-    links = result.scalars().all()
-    return success_response([GenerationTaskLinkRead.model_validate(x) for x in links])
+    stmt = apply_order(
+        stmt,
+        model=GenerationTaskLink,
+        order=order,
+        is_desc=is_desc,
+        allow_fields=TASK_LINK_ORDER_FIELDS,
+        default="updated_at",
+    )
+    items, total = await paginate(db, stmt=stmt, page=page, page_size=page_size)
+    return paginated_response(
+        [GenerationTaskLinkRead.model_validate(x) for x in items],
+        page=page,
+        page_size=page_size,
+        total=total,
+    )
 
 
 @router.post(
@@ -184,6 +204,7 @@ async def create_task_link(
         resource_type=body.resource_type,
         relation_type=body.relation_type,
         relation_entity_id=body.relation_entity_id,
+        file_id=body.file_id,
         status=body.status,
     )
     db.add(link)

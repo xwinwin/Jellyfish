@@ -228,37 +228,45 @@ async def _create_image_task_and_link(
         )
         file_id = file_obj.id
 
+        link_stmt = (
+            select(GenerationTaskLink)
+            .where(
+                GenerationTaskLink.task_id == task_id,
+                GenerationTaskLink.relation_type == relation_type,
+                GenerationTaskLink.relation_entity_id == relation_entity_id,
+            )
+            .limit(1)
+        )
+        link_result = await session.execute(link_stmt)
+        link_row = link_result.scalars().first()
+        if link_row is not None and not link_row.file_id:
+            link_row.file_id = file_id
+
         # 根据 relation_type 将生成文件填充到已有 image 槽位的 file_id（仅首张生效）
         if relation_type == "actor_image_image":
             image_row = await session.get(ActorImageImage, int(relation_entity_id))
-            if image_row is None or image_row.file_id:
-                return
-            image_row.file_id = file_id
+            if image_row is not None and not image_row.file_id:
+                image_row.file_id = file_id
         elif relation_type == "scene_image":
             image_row = await session.get(SceneImage, int(relation_entity_id))
-            if image_row is None or image_row.file_id:
-                return
-            image_row.file_id = file_id
+            if image_row is not None and not image_row.file_id:
+                image_row.file_id = file_id
         elif relation_type == "prop_image":
             image_row = await session.get(PropImage, int(relation_entity_id))
-            if image_row is None or image_row.file_id:
-                return
-            image_row.file_id = file_id
+            if image_row is not None and not image_row.file_id:
+                image_row.file_id = file_id
         elif relation_type == "costume_image":
             image_row = await session.get(CostumeImage, int(relation_entity_id))
-            if image_row is None or image_row.file_id:
-                return
-            image_row.file_id = file_id
+            if image_row is not None and not image_row.file_id:
+                image_row.file_id = file_id
         elif relation_type == "character_image":
             image_row = await session.get(CharacterImage, int(relation_entity_id))
-            if image_row is None or image_row.file_id:
-                return
-            image_row.file_id = file_id
+            if image_row is not None and not image_row.file_id:
+                image_row.file_id = file_id
         elif relation_type == "shot_frame_image":
             image_row = await session.get(ShotFrameImage, int(relation_entity_id))
-            if image_row is None or image_row.file_id:
-                return
-            image_row.file_id = file_id
+            if image_row is not None and not image_row.file_id:
+                image_row.file_id = file_id
 
     async def _runner(task_id: str, args: dict) -> None:
         async with async_session_maker() as session:

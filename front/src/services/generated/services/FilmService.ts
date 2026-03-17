@@ -5,8 +5,8 @@
 import type { ApiResponse_FilmEntityExtractionResult_ } from '../models/ApiResponse_FilmEntityExtractionResult_';
 import type { ApiResponse_FilmShotlistResult_ } from '../models/ApiResponse_FilmShotlistResult_';
 import type { ApiResponse_GenerationTaskLinkRead_ } from '../models/ApiResponse_GenerationTaskLinkRead_';
-import type { ApiResponse_list_GenerationTaskLinkRead__ } from '../models/ApiResponse_list_GenerationTaskLinkRead__';
 import type { ApiResponse_NoneType_ } from '../models/ApiResponse_NoneType_';
+import type { ApiResponse_PaginatedData_GenerationTaskLinkRead__ } from '../models/ApiResponse_PaginatedData_GenerationTaskLinkRead__';
 import type { ApiResponse_TaskCreated_ } from '../models/ApiResponse_TaskCreated_';
 import type { ApiResponse_TaskLinkAdoptRead_ } from '../models/ApiResponse_TaskLinkAdoptRead_';
 import type { ApiResponse_TaskResultRead_ } from '../models/ApiResponse_TaskResultRead_';
@@ -233,8 +233,8 @@ export class FilmService {
         });
     }
     /**
-     * 生成任务关联列表（支持多条件过滤）
-     * @returns ApiResponse_list_GenerationTaskLinkRead__ Successful Response
+     * 生成任务关联列表（分页，支持多条件过滤）
+     * @returns ApiResponse_PaginatedData_GenerationTaskLinkRead__ Successful Response
      * @throws ApiError
      */
     public static listTaskLinksApiV1FilmTaskLinksGet({
@@ -243,6 +243,10 @@ export class FilmService {
         relationEntityId,
         status,
         taskId,
+        order,
+        isDesc = true,
+        page = 1,
+        pageSize = 10,
     }: {
         /**
          * 按 resource_type 过滤
@@ -264,7 +268,23 @@ export class FilmService {
          * 按 task_id 过滤
          */
         taskId?: (string | null),
-    }): CancelablePromise<ApiResponse_list_GenerationTaskLinkRead__> {
+        /**
+         * 排序字段：updated_at/created_at/id/status
+         */
+        order?: (string | null),
+        /**
+         * 是否倒序；默认 true
+         */
+        isDesc?: boolean,
+        /**
+         * 页码
+         */
+        page?: number,
+        /**
+         * 每页条数
+         */
+        pageSize?: number,
+    }): CancelablePromise<ApiResponse_PaginatedData_GenerationTaskLinkRead__> {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/v1/film/task-links',
@@ -274,6 +294,10 @@ export class FilmService {
                 'relation_entity_id': relationEntityId,
                 'status': status,
                 'task_id': taskId,
+                'order': order,
+                'is_desc': isDesc,
+                'page': page,
+                'page_size': pageSize,
             },
             errors: {
                 422: `Validation Error`,

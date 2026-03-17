@@ -1,8 +1,11 @@
 import { AssetTypeTab } from './AssetTypeTab'
 import { StudioAssetsService } from '../../../../services/generated'
 import type { ActorImageRead } from '../../../../services/generated'
+import { useNavigate } from 'react-router-dom'
 
 export function ActorsTab() {
+  const navigate = useNavigate()
+
   return (
     <AssetTypeTab
       label="演员"
@@ -30,9 +33,8 @@ export function ActorsTab() {
       deleteAsset={async (id) => {
         await StudioAssetsService.deleteActorImageApiV1StudioAssetsActorImagesActorImageIdDelete({ actorImageId: id })
       }}
-      generateImage={async (assetId) => {
-        const url = `https://picsum.photos/seed/actor_${assetId}_${Date.now()}/768/768`
-        return url
+      onEditAsset={(asset) => {
+        navigate(`/assets/actors/${asset.id}/edit`)
       }}
     />
   )

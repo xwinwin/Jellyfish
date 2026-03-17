@@ -1,8 +1,11 @@
 import { AssetTypeTab } from './AssetTypeTab'
 import { StudioAssetsService } from '../../../../services/generated'
 import type { CostumeRead } from '../../../../services/generated'
+import { useNavigate } from 'react-router-dom'
 
 export function CostumesTab() {
+  const navigate = useNavigate()
+
   return (
     <AssetTypeTab
       label="服装"
@@ -26,9 +29,8 @@ export function CostumesTab() {
       deleteAsset={async (id) => {
         await StudioAssetsService.deleteCostumeApiV1StudioAssetsCostumesCostumeIdDelete({ costumeId: id })
       }}
-      generateImage={async (assetId) => {
-        const url = `https://picsum.photos/seed/costume_${assetId}_${Date.now()}/768/768`
-        return url
+      onEditAsset={(asset) => {
+        navigate(`/assets/costumes/${asset.id}/edit`)
       }}
     />
   )

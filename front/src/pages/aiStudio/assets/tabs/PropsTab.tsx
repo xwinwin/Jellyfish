@@ -1,8 +1,11 @@
 import { AssetTypeTab } from './AssetTypeTab'
 import { StudioAssetsService } from '../../../../services/generated'
 import type { PropRead } from '../../../../services/generated'
+import { useNavigate } from 'react-router-dom'
 
 export function PropsTab() {
+  const navigate = useNavigate()
+
   return (
     <AssetTypeTab
       label="道具"
@@ -26,9 +29,8 @@ export function PropsTab() {
       deleteAsset={async (id) => {
         await StudioAssetsService.deletePropApiV1StudioAssetsPropsPropIdDelete({ propId: id })
       }}
-      generateImage={async (assetId) => {
-        const url = `https://picsum.photos/seed/prop_${assetId}_${Date.now()}/768/768`
-        return url
+      onEditAsset={(asset) => {
+        navigate(`/assets/props/${asset.id}/edit`)
       }}
     />
   )

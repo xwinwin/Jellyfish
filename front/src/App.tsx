@@ -1,4 +1,4 @@
-import React from 'react'
+import type React from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import MainLayout from './layouts/MainLayout'
 import Settings from './pages/Settings'
@@ -8,6 +8,10 @@ import ProjectWorkbench from './pages/aiStudio/project/ProjectWorkbench'
 import ChapterPrep from './pages/aiStudio/chapter/ChapterPrep'
 import ChapterStudio from './pages/aiStudio/chapter/ChapterStudio'
 import AssetManager from './pages/aiStudio/assets/AssetManager'
+import ActorAssetEditPage from './pages/aiStudio/assets/ActorAssetEditPage.tsx'
+import SceneAssetEditPage from './pages/aiStudio/assets/SceneAssetEditPage.tsx'
+import PropAssetEditPage from './pages/aiStudio/assets/PropAssetEditPage.tsx'
+import CostumeAssetEditPage from './pages/aiStudio/assets/CostumeAssetEditPage.tsx'
 import PromptTemplateManager from './pages/aiStudio/prompts/PromptTemplateManager'
 import FileManager from './pages/aiStudio/files/FileManager'
 import VideoEditor from './pages/aiStudio/editor/VideoEditor'
@@ -28,6 +32,10 @@ const App: React.FC = () => {
           <Route path="projects/:projectId/chapters/:chapterId/studio" element={<ChapterStudio />} />
           <Route path="projects/:projectId/editor" element={<VideoEditor />} />
           <Route path="assets" element={<AssetManager />} />
+          <Route path="assets/actors/:actorImageId/edit" element={<ActorAssetEditPage />} />
+          <Route path="assets/scenes/:sceneId/edit" element={<SceneAssetEditPage />} />
+          <Route path="assets/props/:propId/edit" element={<PropAssetEditPage />} />
+          <Route path="assets/costumes/:costumeId/edit" element={<CostumeAssetEditPage />} />
           <Route path="prompts" element={<PromptTemplateManager />} />
           <Route path="files" element={<FileManager />} />
           <Route path="agents/:id/edit" element={<AgentEdit />} />
